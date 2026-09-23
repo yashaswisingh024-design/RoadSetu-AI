@@ -125,8 +125,8 @@ export const ReportPotholeView: React.FC<
       country: 'India',
       formattedAddress:
         'Acquiring real-time location telemetry...',
-      latitude: 19.2312,
-      longitude: 72.9765,
+      latitude: 0,
+      longitude: 0,
     });
 
   useEffect(() => {
@@ -206,21 +206,13 @@ export const ReportPotholeView: React.FC<
             setIsIframeBlocked(true);
           }
 
-          setHumanLocation({
-            road: 'Ghodbunder Road (SH-42)',
-            area: 'Manpada Sector 4',
-            landmark: 'Near Manpada Junction',
-            city: 'Thane',
-            state: 'Maharashtra',
-            country: 'India',
-            formattedAddress:
-              'Ghodbunder Road, Near Manpada Junction, Thane, Maharashtra',
-            latitude: 19.2312,
-            longitude: 72.9765,
-          });
+          setLocationError(
+            res.errorMessage ||
+              'Live location could not be detected. Please use Search location or Enter manually.'
+          );
 
           setLocationSuccessText(
-            'Corridor default set'
+            'Location required'
           );
         }
       }
@@ -454,29 +446,72 @@ export const ReportPotholeView: React.FC<
     }
   };
 
+  /* ---------------- IMAGE COMPRESSION ---------------- */
+
+  const compressImage = (
+    dataUrl: string,
+    maxWidth = 1280,
+    quality = 0.75
+  ): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+
+      image.onload = () => {
+        const scale = Math.min(1, maxWidth / image.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.width * scale));
+        canvas.height = Math.max(1, Math.round(image.height * scale));
+
+        const context = canvas.getContext('2d');
+        if (!context) {
+          reject(new Error('Unable to prepare image for upload.'));
+          return;
+        }
+
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+
+      image.onerror = () =>
+        reject(new Error('Unable to read the selected image.'));
+
+      image.src = dataUrl;
+    });
+  };
+
   /* ---------------- UPLOAD ---------------- */
 
-  const handleFileUpload = (
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
-
     if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file.', 'error');
+      return;
+    }
 
     const reader = new FileReader();
 
-    reader.onload = () => {
-      const result =
-        reader.result as string;
+    reader.onload = async () => {
+      try {
+        const result = reader.result as string;
+        const compressed = await compressImage(result);
 
-      setPhotoUrl(result);
-      setBase64Image(result);
-
-      showToast(
-        'Defect photo loaded successfully.',
-        'success'
-      );
+        setPhotoUrl(compressed);
+        setBase64Image(compressed);
+        showToast('Photo compressed and loaded successfully.', 'success');
+      } catch {
+        showToast(
+          'Unable to process this image. Please try another photo.',
+          'error'
+        );
+      }
     };
+
+    reader.onerror = () =>
+      showToast('Unable to read the selected image.', 'error');
 
     reader.readAsDataURL(file);
   };
@@ -523,6 +558,23 @@ export const ReportPotholeView: React.FC<
   const runAiAnalysisAndSubmit = async (
     overrideDuplicate = false
   ) => {
+    const hasRealCoordinates =
+      Number.isFinite(humanLocation.latitude) &&
+      Number.isFinite(humanLocation.longitude) &&
+      (humanLocation.latitude !== 0 || humanLocation.longitude !== 0);
+
+    if (!hasRealCoordinates) {
+      setCurrentStep(2);
+      setLocationError(
+        'A real location is required before submitting. Use GPS, Search location, or Enter manually.'
+      );
+      showToast(
+        'Please confirm the defect location before submitting.',
+        'error'
+      );
+      return;
+    }
+
     if (!overrideDuplicate) {
       const dupCheck =
         checkForDuplicates(
@@ -1295,12 +1347,8 @@ export const ReportPotholeView: React.FC<
                             ? `${manualLandmark}, `
                             : ''
                         }${manualCity}`,
-                        latitude:
-                          humanLocation.latitude ||
-                          19.2312,
-                        longitude:
-                          humanLocation.longitude ||
-                          72.9765,
+                        latitude: 0,
+                        longitude: 0,
                       });
 
                       setLocationSource(
