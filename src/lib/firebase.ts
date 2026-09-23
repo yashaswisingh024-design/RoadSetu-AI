@@ -28,6 +28,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  increment,
 } from 'firebase/firestore';
 
 import configJson from '../../firebase-applet-config.json';
@@ -44,9 +45,7 @@ const firebaseConfig = {
   firestoreDatabaseId: configJson.firestoreDatabaseId || '(default)',
 };
 
-export const isFirebaseConfigured = Boolean(
-  firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.authDomain
-);
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.authDomain);
 
 let app: FirebaseApp;
 let auth: Auth;
@@ -66,35 +65,20 @@ try {
 }
 
 export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
+  CREATE = 'create', UPDATE = 'update', DELETE = 'delete', LIST = 'list', GET = 'get', WRITE = 'write',
 }
 
 export interface FirestoreErrorInfo {
   error: string;
   operationType: OperationType;
   path: string | null;
-  authInfo: {
-    userId?: string | null;
-    email?: string | null;
-    emailVerified?: boolean | null;
-    isAnonymous?: boolean | null;
-  };
+  authInfo: { userId?: string | null; email?: string | null; emailVerified?: boolean | null; isAnonymous?: boolean | null };
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
-    authInfo: {
-      userId: auth?.currentUser?.uid || null,
-      email: auth?.currentUser?.email || null,
-      emailVerified: auth?.currentUser?.emailVerified || null,
-      isAnonymous: auth?.currentUser?.isAnonymous || null,
-    },
+    authInfo: { userId: auth?.currentUser?.uid || null, email: auth?.currentUser?.email || null, emailVerified: auth?.currentUser?.emailVerified || null, isAnonymous: auth?.currentUser?.isAnonymous || null },
     operationType,
     path,
   };
@@ -106,13 +90,9 @@ export function sanitizeForFirestore<T>(val: T): T {
   if (val === undefined) return null as unknown as T;
   if (val === null || typeof val !== 'object') return val;
   if (val instanceof Date) return val;
-  if (Array.isArray(val)) {
-    return val.filter((item) => item !== undefined).map((item) => sanitizeForFirestore(item)) as unknown as T;
-  }
+  if (Array.isArray(val)) return val.filter((item) => item !== undefined).map((item) => sanitizeForFirestore(item)) as unknown as T;
   const cleanObj: Record<string, any> = {};
-  for (const [key, value] of Object.entries(val)) {
-    if (value !== undefined) cleanObj[key] = sanitizeForFirestore(value);
-  }
+  for (const [key, value] of Object.entries(val)) if (value !== undefined) cleanObj[key] = sanitizeForFirestore(value);
   return cleanObj as T;
 }
 
@@ -122,77 +102,36 @@ export async function getCurrentIdToken(forceRefresh = false): Promise<string | 
 }
 
 export {
-  app,
-  auth,
-  db,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  firebaseSignOut,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  GoogleAuthProvider,
-  signInWithPopup,
-  updateProfile,
-  onAuthStateChanged,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  serverTimestamp,
+  app, auth, db,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, firebaseSignOut,
+  sendPasswordResetEmail, sendEmailVerification, GoogleAuthProvider, signInWithPopup,
+  updateProfile, onAuthStateChanged,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  query, where, orderBy, onSnapshot, serverTimestamp, increment,
 };
 
 export type { FirebaseUser };
 
 export function formatAuthError(error: unknown): string {
-  const code = typeof error === 'object' && error !== null && 'code' in error
-    ? String((error as { code?: unknown }).code || 'unknown')
-    : 'unknown';
+  const code = typeof error === 'object' && error !== null && 'code' in error ? String((error as { code?: unknown }).code || 'unknown') : 'unknown';
   const rawMessage = error instanceof Error ? error.message : String(error ?? 'Unknown authentication error');
   const normalizedCode = code.startsWith('auth/') ? code : `auth/${code}`;
-
   switch (normalizedCode) {
-    case 'auth/invalid-credential':
-    case 'auth/wrong-password':
-      return 'Invalid email or password.';
-    case 'auth/user-not-found':
-      return 'No Firebase account exists with this email.';
-    case 'auth/user-disabled':
-      return 'This Firebase account has been disabled.';
-    case 'auth/email-already-in-use':
-      return 'An account already exists with this email.';
-    case 'auth/weak-password':
-      return 'Password is too weak. Use at least 8 characters.';
-    case 'auth/invalid-email':
-      return 'Please enter a valid email address.';
-    case 'auth/operation-not-allowed':
-      return 'This sign-in method is disabled in Firebase Authentication. Enable the required provider in Firebase Console → Authentication → Sign-in method.';
-    case 'auth/unauthorized-domain':
-    case 'auth/app-not-authorized':
-      return 'This website domain is not authorized in Firebase Authentication.';
-    case 'auth/invalid-api-key':
-    case 'auth/api-key-not-valid':
-      return 'Firebase configuration is invalid. Check the Firebase web configuration.';
-    case 'auth/network-request-failed':
-      return 'Firebase could not connect to the authentication service. Check your internet connection.';
-    case 'auth/too-many-requests':
-      return 'Too many authentication attempts. Please wait and try again later.';
-    case 'auth/popup-blocked':
-      return 'The Google sign-in popup was blocked by your browser.';
-    case 'auth/popup-closed-by-user':
-      return 'The Google sign-in popup was closed before sign-in completed.';
-    case 'auth/account-exists-with-different-credential':
-      return 'An account already exists using a different sign-in method.';
-    case 'auth/requires-recent-login':
-      return 'Please sign in again before performing this action.';
-    default:
-      console.error('Unhandled Firebase Auth error:', { code: normalizedCode, message: rawMessage, error });
-      return `Firebase authentication failed [${normalizedCode}]: ${rawMessage}`;
+    case 'auth/invalid-credential': case 'auth/wrong-password': return 'Invalid email or password.';
+    case 'auth/user-not-found': return 'No Firebase account exists with this email.';
+    case 'auth/user-disabled': return 'This Firebase account has been disabled.';
+    case 'auth/email-already-in-use': return 'An account already exists with this email.';
+    case 'auth/weak-password': return 'Password is too weak. Use at least 8 characters.';
+    case 'auth/invalid-email': return 'Please enter a valid email address.';
+    case 'auth/operation-not-allowed': return 'This sign-in method is disabled in Firebase Authentication. Enable the required provider in Firebase Console → Authentication → Sign-in method.';
+    case 'auth/unauthorized-domain': case 'auth/app-not-authorized': return 'This website domain is not authorized in Firebase Authentication.';
+    case 'auth/invalid-api-key': case 'auth/api-key-not-valid': return 'Firebase configuration is invalid. Check the Firebase web configuration.';
+    case 'auth/network-request-failed': return 'Firebase could not connect to the authentication service. Check your internet connection.';
+    case 'auth/too-many-requests': return 'Too many authentication attempts. Please wait and try again later.';
+    case 'auth/popup-blocked': return 'The Google sign-in popup was blocked by your browser.';
+    case 'auth/popup-closed-by-user': return 'The Google sign-in popup was closed before sign-in completed.';
+    case 'auth/account-exists-with-different-credential': return 'An account already exists using a different sign-in method.';
+    case 'auth/requires-recent-login': return 'Please sign in again before performing this action.';
+    default: console.error('Unhandled Firebase Auth error:', { code: normalizedCode, message: rawMessage, error }); return `Firebase authentication failed [${normalizedCode}]: ${rawMessage}`;
   }
 }
