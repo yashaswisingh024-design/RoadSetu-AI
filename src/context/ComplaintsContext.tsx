@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, collection, doc, setDoc, updateDoc, onSnapshot, query, where, sanitizeForFirestore } from '../lib/firebase';
+import { db, collection, doc, setDoc, updateDoc, increment, onSnapshot, query, where, sanitizeForFirestore } from '../lib/firebase';
 import { Complaint, VerificationResult, NotificationItem, DuplicateCheckResult } from '../types';
 import { useAuth } from './AuthContext';
 import { calculateDistanceMeters } from '../utils/reverseGeocode';
@@ -192,7 +192,21 @@ export const ComplaintsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
       const notifId = `NOTIF-${Date.now()}-${Math.floor(Math.random()*1000)}`;
       await setDoc(doc(db,'notifications',notifId), sanitizeForFirestore({ id:notifId, userId:user.uid, reportId:complaintId, title:'Complaint Registered', message:`Your complaint ${complaintId} has been registered and routed to ${newComplaint.department}.`, type:'submission', read:false, createdAt:now }));
-      await updateDoc(doc(db,'users',user.uid), { reportsCount:(user.reportsCount || 0) + 1 }).catch(error => console.warn('Could not increment user count:', error));
+
+      // Atomically increment the counter and create the profile document when it does not exist.
+      // merge:true preserves existing profile fields (including role, name, photo, etc.).
+      await setDoc(
+        doc(db, 'users', user.uid),
+        sanitizeForFirestore({
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || 'Citizen',
+          role: user.role || 'citizen',
+          reportsCount: increment(1),
+        }),
+        { merge: true }
+      );
+
       showToast(`Complaint ${complaintId} submitted successfully!`,'success');
       return newComplaint;
     } catch (error) {
