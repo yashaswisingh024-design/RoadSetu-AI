@@ -56,21 +56,74 @@ function getAIClient() {
   return aiClient;
 }
 
+const GEMINI_MODELS = [
+  'gemini-3.5-flash-lite',
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+];
+
+function isTransientGeminiError(error: any) {
+  const message = String(error?.message || error || '').toLowerCase();
+  const status = Number(error?.status || error?.code || 0);
+  return (
+    status === 429 || status === 500 || status === 502 || status === 503 || status === 504 ||
+    message.includes('unavailable') || message.includes('high demand') ||
+    message.includes('resource exhausted') || message.includes('temporarily') ||
+    message.includes('timeout') || message.includes('timed out')
+  );
+}
+
+function friendlyGeminiError(error: any) {
+  const message = String(error?.message || error || '');
+  if (/high demand|unavailable|resource exhausted|temporarily/i.test(message)) {
+    return 'AI service is temporarily busy. Please try again in a few seconds.';
+  }
+  if (/timeout|timed out/i.test(message)) {
+    return 'AI analysis took too long. Please try again with the same image.';
+  }
+  return 'AI analysis is temporarily unavailable. Please try again.';
+}
+
 /**
- * Keep the civic image analysis request bounded and predictable.
- * The previous implementation tried three models with two attempts each,
- * which could keep a Netlify request open long enough to hit an inactivity timeout.
+ * Gemini can temporarily return 429/503/UNAVAILABLE during demand spikes.
+ * Try a low-latency model first and fall back to other stable Flash models.
+ * Each attempt is bounded so a public Netlify request cannot hang indefinitely.
  */
 async function generateGeminiContent(client: GoogleGenAI, contents: any[]) {
-  return await client.models.generateContent({
-    model: 'gemini-3.8-flash',
-    contents,
-    config: {
-      thinkingConfig: {
-        thinkingLevel: 'low',
-      },
-    },
-  });
+  let lastError: any = null;
+
+  for (const model of GEMINI_MODELS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    try {
+      return await client.models.generateContent({
+        model,
+        contents,
+        config: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: 700,
+          abortSignal: controller.signal,
+        },
+      });
+    } catch (error: any) {
+      lastError = error;
+      console.warn(`Gemini model ${model} failed; trying fallback if transient.`, {
+        code: error?.code,
+        status: error?.status,
+        message: error?.message,
+      });
+      if (!isTransientGeminiError(error)) throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const error = new Error(friendlyGeminiError(lastError));
+  (error as any).code = 'AI_TEMPORARILY_UNAVAILABLE';
+  (error as any).status = 503;
+  throw error;
 }
 
 const health = (_req: Request, res: Response) => res.json({ status: 'ok', aiConfigured: Boolean(process.env.GEMINI_API_KEY), firebaseConfigured: firebaseAdminReady, timestamp: new Date().toISOString() });
@@ -150,7 +203,8 @@ app.post('/api/analyze-defect', requireFirebaseUser, async (req: AuthedRequest, 
     return res.json({ success: true, data: normalizeDefectResult(parseAiJson(response.text || '')) });
   } catch (error: any) {
     console.error('AI defect analysis failed:', { code: error?.code, status: error?.status, message: error?.message });
-    return res.status(502).json({ success: false, error: error?.message || 'AI analysis failed. No complaint was submitted.' });
+    const status = Number(error?.status) === 503 ? 503 : 502;
+    return res.status(status).json({ success: false, error: friendlyGeminiError(error) });
   }
 });
 
@@ -171,7 +225,8 @@ app.post('/api/verify-repair', requireFirebaseUser, async (req: AuthedRequest, r
     return res.json({ success: true, data: parseAiJson(response.text || '') });
   } catch (error: any) {
     console.error('Repair verification failed:', { code: error?.code, status: error?.status, message: error?.message });
-    return res.status(502).json({ success: false, error: error?.message || 'Repair verification failed.' });
+    const status = Number(error?.status) === 503 ? 503 : 502;
+    return res.status(status).json({ success: false, error: friendlyGeminiError(error) });
   }
 });
 
