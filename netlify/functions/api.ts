@@ -56,25 +56,21 @@ function getAIClient() {
   return aiClient;
 }
 
+/**
+ * Keep the civic image analysis request bounded and predictable.
+ * The previous implementation tried three models with two attempts each,
+ * which could keep a Netlify request open long enough to hit an inactivity timeout.
+ */
 async function generateGeminiContent(client: GoogleGenAI, contents: any[]) {
-  const models = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash'];
-  let lastError: any = null;
-  for (const model of models) {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        return await client.models.generateContent({ model, contents });
-      } catch (error: any) {
-        lastError = error;
-        const message = String(error?.message || error || '');
-        const status = Number(error?.status || error?.code || 0);
-        const transient = status === 503 || status === 429 || /UNAVAILABLE|high demand|overloaded|temporarily/i.test(message);
-        console.warn('Gemini generation attempt failed:', { model, attempt: attempt + 1, transient, status, message });
-        if (!transient) throw error;
-        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 1200));
-      }
-    }
-  }
-  throw lastError || new Error('Gemini AI is temporarily unavailable. Please try again.');
+  return await client.models.generateContent({
+    model: 'gemini-3.8-flash',
+    contents,
+    config: {
+      thinkingConfig: {
+        thinkingLevel: 'low',
+      },
+    },
+  });
 }
 
 const health = (_req: Request, res: Response) => res.json({ status: 'ok', aiConfigured: Boolean(process.env.GEMINI_API_KEY), firebaseConfigured: firebaseAdminReady, timestamp: new Date().toISOString() });
