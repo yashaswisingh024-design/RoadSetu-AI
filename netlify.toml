@@ -10,6 +10,13 @@
   node_bundler = "esbuild"
   external_node_modules = ["express", "firebase-admin", "serverless-http", "vite"]
 
+# Route the production image-analysis endpoint to its own lightweight function.
+[[redirects]]
+  from = "/api/analyze-defect"
+  to = "/.netlify/functions/analyze-defect"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/api/:splat"
