@@ -9,31 +9,43 @@ permissions:
 
 jobs:
   fix-report-view:
-    if: ${{ !contains(github.event.head_commit.message, 'fix(report-view)') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
+      - name: Skip generated fix commit
+        if: ${{ contains(github.event.head_commit.message, 'fix(report-view)') }}
+        run: echo "Report view fix already applied; skipping."
+
       - name: Apply report view fixes
-        shell: python
+        if: ${{ !contains(github.event.head_commit.message, 'fix(report-view)') }}
         run: |
+          python - <<'PY'
           from pathlib import Path
           import re
 
           path = Path('src/views/ReportPotholeView.tsx')
           text = path.read_text()
 
-          text = text.replace("""      latitude: 19.2312,\n      longitude: 72.9765,""", """      latitude: 0,\n      longitude: 0,""")
+          text = text.replace(
+              """      latitude: 19.2312,\n      longitude: 72.9765,""",
+              """      latitude: 0,\n      longitude: 0,"""
+          )
 
           old = re.compile(r"""      } else {\n        if \(active\) {\n          if \(res\.isIframeBlocked\) {\n            setIsIframeBlocked\(true\);\n          }\n\n          setHumanLocation\(\{\n            road: 'Ghodbunder Road \(SH-42\)',\n            area: 'Manpada Sector 4',\n            landmark: 'Near Manpada Junction',\n            city: 'Thane',\n            state: 'Maharashtra',\n            country: 'India',\n            formattedAddress:\n              'Ghodbunder Road, Near Manpada Junction, Thane, Maharashtra',\n            latitude: 19\.2312,\n            longitude: 72\.9765,\n          \}\);\n\n          setLocationSuccessText\(\n            'Corridor default set'\n          \);\n        }\n      }""")
+
           replacement = """      } else {\n        if (active) {\n          if (res.isIframeBlocked) {\n            setIsIframeBlocked(true);\n          }\n\n          setLocationError(\n            res.errorMessage ||\n              'Live location could not be detected. Please use Search location or Enter manually.'\n          );\n\n          setLocationSuccessText(\n            'Location required'\n          );\n        }\n      }"""
+
           text, count = old.subn(replacement, text)
           if count != 1:
               raise SystemExit(f'Expected exactly 1 GPS fallback, found {count}')
 
-          text = text.replace("""                        latitude:\n                          humanLocation.latitude ||\n                          19.2312,\n                        longitude:\n                          humanLocation.longitude ||\n                          72.9765,""", """                        latitude: 0,\n                        longitude: 0,""")
+          text = text.replace(
+              """                        latitude:\n                          humanLocation.latitude ||\n                          19.2312,\n                        longitude:\n                          humanLocation.longitude ||\n                          72.9765,""",
+              """                        latitude: 0,\n                        longitude: 0,"""
+          )
 
           marker = "  /* ---------------- UPLOAD ---------------- */\n"
           helper = r'''  /* ---------------- IMAGE COMPRESSION ---------------- */
@@ -156,8 +168,10 @@ jobs:
 
           if 'const compressImage = (' not in final:
               raise SystemExit('Compression helper was not added')
+          PY
 
       - name: Commit and push
+        if: ${{ !contains(github.event.head_commit.message, 'fix(report-view)') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
