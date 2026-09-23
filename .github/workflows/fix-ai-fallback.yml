@@ -58,17 +58,10 @@ jobs:
             const message = String(error?.message || error || '').toLowerCase();
             const status = Number(error?.status || error?.code || 0);
             return (
-              status === 429 ||
-              status === 500 ||
-              status === 502 ||
-              status === 503 ||
-              status === 504 ||
-              message.includes('unavailable') ||
-              message.includes('high demand') ||
-              message.includes('resource exhausted') ||
-              message.includes('temporarily') ||
-              message.includes('timeout') ||
-              message.includes('timed out')
+              status === 429 || status === 500 || status === 502 || status === 503 || status === 504 ||
+              message.includes('unavailable') || message.includes('high demand') ||
+              message.includes('resource exhausted') || message.includes('temporarily') ||
+              message.includes('timeout') || message.includes('timed out')
             );
           }
 
@@ -95,7 +88,6 @@ jobs:
                   model,
                   contents,
                   config: {
-                    thinkingConfig: { thinkingLevel: 'low' },
                     responseMimeType: 'application/json',
                     maxOutputTokens: 700,
                     abortSignal: controller.signal,
@@ -139,7 +131,6 @@ jobs:
           if old_catch not in text:
               raise SystemExit('Expected defect-analysis catch block was not found; refusing to modify the file.')
           text = text.replace(old_catch, new_catch, 1)
-
           api.write_text(text)
 
           firebase = Path('src/lib/firebase.ts')
@@ -149,14 +140,9 @@ jobs:
 """
           new_auth = """    case 'auth/operation-not-allowed':
       return 'This sign-in method is disabled in Firebase Authentication. Enable the required provider in Firebase Console → Authentication → Sign-in method.';
-    case 'auth/operation-not-allowed':
-      return 'Google sign-in is not enabled for this Firebase project. Enable Google under Firebase Console → Authentication → Sign-in method.';
 """
-          # Keep one operation-not-allowed case; the more useful message covers the UI action.
           if old_auth in ftext:
-              ftext = ftext.replace(old_auth, """    case 'auth/operation-not-allowed':
-      return 'This sign-in method is disabled in Firebase Authentication. Enable the required provider in Firebase Console → Authentication → Sign-in method.';
-""", 1)
+              ftext = ftext.replace(old_auth, new_auth, 1)
           firebase.write_text(ftext)
           PY
 
