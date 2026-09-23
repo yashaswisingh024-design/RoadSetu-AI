@@ -172,7 +172,7 @@ export function formatAuthError(error: unknown): string {
     case 'auth/invalid-email':
       return 'Please enter a valid email address.';
     case 'auth/operation-not-allowed':
-      return 'Email/password authentication is disabled in Firebase Authentication. Enable the Email/Password provider.';
+      return 'This sign-in method is disabled in Firebase Authentication. Enable the required provider in Firebase Console → Authentication → Sign-in method.';
     case 'auth/unauthorized-domain':
     case 'auth/app-not-authorized':
       return 'This website domain is not authorized in Firebase Authentication.';
