@@ -56,46 +56,51 @@ function getAIClient() {
   return aiClient;
 }
 
+// Stable Gemini models ordered for fast multimodal classification first.
+// 3.1 Flash-Lite is GA and optimized for speed/scale; 3.5 Flash-Lite is the next low-cost fallback.
 const GEMINI_MODELS = [
+  'gemini-3.1-flash-lite',
   'gemini-3.5-flash-lite',
-  'gemini-3.8-flash',
-  'gemini-3.7-flash',
   'gemini-3.6-flash',
+  'gemini-3.8-flash',
 ];
 
 function isTransientGeminiError(error: any) {
   const message = String(error?.message || error || '').toLowerCase();
   const status = Number(error?.status || error?.code || 0);
   return (
-    status === 429 || status === 500 || status === 502 || status === 503 || status === 504 ||
+    status === 408 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504 ||
     message.includes('unavailable') || message.includes('high demand') ||
     message.includes('resource exhausted') || message.includes('temporarily') ||
+    message.includes('quota') || message.includes('rate limit') ||
     message.includes('timeout') || message.includes('timed out')
   );
 }
 
 function friendlyGeminiError(error: any) {
   const message = String(error?.message || error || '');
-  if (/high demand|unavailable|resource exhausted|temporarily/i.test(message)) {
-    return 'AI service is temporarily busy. Please try again in a few seconds.';
+  if (/quota|rate limit|resource exhausted/i.test(message)) {
+    return 'AI quota is temporarily exhausted. Please retry shortly or use a Gemini API key with available quota.';
+  }
+  if (/high demand|unavailable|temporarily/i.test(message)) {
+    return 'AI service is temporarily busy. Please retry in a few seconds.';
   }
   if (/timeout|timed out/i.test(message)) {
-    return 'AI analysis took too long. Please try again with the same image.';
+    return 'AI analysis took too long. Please retry with the same image.';
   }
   return 'AI analysis is temporarily unavailable. Please try again.';
 }
 
 /**
- * Gemini can temporarily return 429/503/UNAVAILABLE during demand spikes.
- * Try a low-latency model first and fall back to other stable Flash models.
- * Each attempt is bounded so a public Netlify request cannot hang indefinitely.
+ * Use stable, low-latency multimodal models in sequence. Each attempt is bounded
+ * so one overloaded model cannot consume the whole Netlify function window.
  */
 async function generateGeminiContent(client: GoogleGenAI, contents: any[]) {
   let lastError: any = null;
 
   for (const model of GEMINI_MODELS) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), 9000);
 
     try {
       return await client.models.generateContent({
