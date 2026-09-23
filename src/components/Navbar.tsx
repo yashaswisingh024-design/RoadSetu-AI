@@ -126,7 +126,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       ];
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur-xl shadow-sm">
+    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur-xl">
       <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
 
         {/* LOGO */}
@@ -134,7 +134,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() =>
             handleNavClick(user ? 'dashboard' : 'landing')
           }
-          className="group flex items-center gap-3 text-left"
+          className="group flex items-center gap-3 text-left focus:outline-none"
         >
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-cyan-500 p-[2px] shadow-md shadow-blue-500/20 transition-transform group-hover:scale-105">
             <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-white">
@@ -231,7 +231,6 @@ export const Navbar: React.FC<NavbarProps> = ({
 
               {notificationsOpen && (
                 <div className="absolute right-0 top-12 z-50 w-80 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
-
                   {notifications.length === 0 ? (
                     <div className="p-4 text-sm text-slate-500">
                       No notifications yet.
@@ -243,9 +242,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                         onClick={() =>
                           markNotificationAsRead(n.id)
                         }
-                        className={`block w-full rounded-xl p-3 text-left transition hover:bg-slate-50 ${
-                          n.read ? 'opacity-60' : ''
-                        }`}
+                        className={`
+                          block w-full rounded-xl p-3 text-left
+                          transition hover:bg-slate-50
+                          ${n.read ? 'opacity-60' : ''}
+                        `}
                       >
                         <div className="text-sm font-bold text-slate-900">
                           {n.title}
@@ -294,7 +295,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <div className="absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
 
                   <button
-                    onClick={onOpenProfile}
+                    onClick={() => {
+                      onOpenProfile();
+                      setProfileDropdownOpen(false);
+                    }}
                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-slate-700 transition hover:bg-slate-50"
                   >
                     <User className="h-4 w-4 text-blue-600" />
@@ -351,11 +355,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ? openAuthModal('login')
                     : handleNavClick(item.id)
                 }
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${
-                  currentView === item.id
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-slate-700 hover:bg-slate-50'
-                }`}
+                className={`
+                  flex w-full items-center gap-3 rounded-xl px-3 py-3
+                  text-sm font-bold transition
+                  ${
+                    currentView === item.id
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }
+                `}
               >
                 <Icon className="h-4 w-4" />
                 {item.label}
