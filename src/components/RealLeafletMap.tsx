@@ -1,0 +1,6 @@
+import React from 'react';
+import { MapPin } from 'lucide-react';
+import { Complaint } from '../types';
+
+interface RealLeafletMapProps { complaints: Complaint[]; selectedComplaintId?: string; onSelectComplaint:(complaint:Complaint)=>void; className?:string; }
+export const RealLeafletMap: React.FC<RealLeafletMapProps> = ({ complaints, selectedComplaintId, onSelectComplaint, className='' }) => <div className={`relative overflow-hidden rounded-2xl bg-slate-100 ${className}`}><div className="absolute inset-0 opacity-40" style={{backgroundImage:'linear-gradient(#cbd5e1 1px,transparent 1px),linear-gradient(90deg,#cbd5e1 1px,transparent 1px)',backgroundSize:'40px 40px'}}/><div className="absolute inset-0 flex flex-wrap content-center justify-center gap-3 p-8">{complaints.slice(0,40).map(c=><button key={c.id} title={c.id} onClick={()=>onSelectComplaint(c)} className={`relative rounded-full p-2 shadow-md ${selectedComplaintId===c.id?'bg-blue-700 text-white ring-4 ring-blue-200':'bg-white text-blue-600'}`}><MapPin className="h-4 w-4"/></button>)}</div><div className="absolute bottom-4 left-4 rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-xs font-semibold text-slate-600 shadow">{complaints.length} live reports</div></div>;
