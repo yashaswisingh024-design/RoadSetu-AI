@@ -1,3 +1,5 @@
+import { auth } from './firebase';
+
 export type ApiFetchOptions = RequestInit & { timeoutMs?: number };
 
 export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOptions = {}): Promise<Response> {
@@ -6,7 +8,18 @@ export async function apiFetch(input: RequestInfo | URL, options: ApiFetchOption
   const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    return await fetch(input, { ...requestInit, signal: controller.signal });
+    const headers = new Headers(requestInit.headers || {});
+    const currentUser = auth?.currentUser;
+    if (currentUser && !headers.has('Authorization')) {
+      const token = await currentUser.getIdToken();
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    return await fetch(input, {
+      ...requestInit,
+      headers,
+      signal: controller.signal,
+    });
   } finally {
     window.clearTimeout(timeout);
   }
