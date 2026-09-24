@@ -31,11 +31,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const { user } = useAuth();
   const { userComplaints } = useComplaints();
 
-  const unresolvedCount = userComplaints.filter(
-    (c) =>
-      c.status === 'reported' ||
-      c.status === 'ai_analyzed'
-  ).length;
+  const totalReports = Math.max(user?.reportsCount ?? 0, userComplaints.length);
+
+  const unresolvedCount = userComplaints.length > 0
+    ? userComplaints.filter(
+        (c) =>
+          c.status === 'reported' ||
+          c.status === 'ai_analyzed'
+      ).length
+    : totalReports;
 
   const underRepairCount = userComplaints.filter(
     (c) =>
@@ -43,9 +47,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       c.status === 'repair_claimed'
   ).length;
 
-  const verifiedCount = userComplaints.filter(
-    (c) => c.status === 'verified'
-  ).length;
+  const verifiedCount = Math.max(
+    user?.verifiedRepairsCount ?? 0,
+    userComplaints.filter((c) => c.status === 'verified').length
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-6 text-slate-900 sm:px-6 lg:px-8 lg:py-8">
@@ -161,7 +166,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             <div className="mt-4 text-3xl font-black text-slate-900">
-              {userComplaints.length}
+              {totalReports}
             </div>
 
             <p className="mt-1 text-xs text-blue-600">

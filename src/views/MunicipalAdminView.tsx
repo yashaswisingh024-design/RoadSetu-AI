@@ -191,7 +191,7 @@ export const MunicipalAdminView: React.FC<
             updated
           );
         } else {
-          onNavigate('verify');
+          onNavigate('verification');
         }
       } catch (error) {
         console.error(

@@ -15,6 +15,9 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   Firestore,
   collection,
   doc,
@@ -26,6 +29,7 @@ import {
   query,
   where,
   orderBy,
+  limit,
   onSnapshot,
   serverTimestamp,
   increment,
@@ -54,11 +58,29 @@ let db: Firestore;
 try {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
-  db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
+  
+  const cacheConfig = {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager(),
+    }),
+  };
+
+  const customDbId = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? firebaseConfig.firestoreDatabaseId
+    : undefined;
+
+  try {
+    db = customDbId
+      ? initializeFirestore(app, cacheConfig, customDbId)
+      : initializeFirestore(app, cacheConfig);
+  } catch {
+    // In case Firestore is already initialized in this process
+    db = customDbId
+      ? getFirestore(app, customDbId)
+      : getFirestore(app);
+  }
 } catch (err) {
-  console.error('Firebase initialization error:', err);
+  console.warn('Firebase initialization notice:', err);
   app = {} as FirebaseApp;
   auth = {} as Auth;
   db = {} as Firestore;
@@ -86,33 +108,25 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-/**
- * Remove undefined values before sending data to Firestore without destroying
- * Firestore FieldValue transforms such as increment(1), serverTimestamp(), etc.
- *
- * IMPORTANT: FieldValue transform objects must reach Firestore unchanged.
- * Treating increment(1) as a normal object turns the transform into ordinary
- * object data, which is why reportsCount could remain 0 instead of increasing.
- */
+export function isFirestoreFieldValue(val: unknown): boolean {
+  if (!val || typeof val !== 'object') return false;
+  if (val instanceof Date) return false;
+  const proto = Object.getPrototypeOf(val);
+  const name = (val as any).constructor?.name || proto?.constructor?.name || '';
+  if (name.includes('FieldValue') || name.includes('Increment') || name.includes('Timestamp')) return true;
+  if ('_methodName' in (val as Record<string, unknown>)) return true;
+  if (typeof (val as any).isEqual === 'function' && typeof (val as any).toDebugString === 'function') return true;
+  return false;
+}
+
 export function sanitizeForFirestore<T>(val: T): T {
   if (val === undefined) return null as unknown as T;
   if (val === null || typeof val !== 'object') return val;
   if (val instanceof Date) return val;
-
-  // Preserve Firestore FieldValue transform sentinels intact.
-  // The modular Firestore SDK's transform implementations expose _methodName.
-  if ('_methodName' in (val as object)) return val;
-
-  if (Array.isArray(val)) {
-    return val
-      .filter((item) => item !== undefined)
-      .map((item) => sanitizeForFirestore(item)) as unknown as T;
-  }
-
+  if (isFirestoreFieldValue(val)) return val;
+  if (Array.isArray(val)) return val.filter((item) => item !== undefined).map((item) => sanitizeForFirestore(item)) as unknown as T;
   const cleanObj: Record<string, any> = {};
-  for (const [key, value] of Object.entries(val)) {
-    if (value !== undefined) cleanObj[key] = sanitizeForFirestore(value);
-  }
+  for (const [key, value] of Object.entries(val)) if (value !== undefined) cleanObj[key] = sanitizeForFirestore(value);
   return cleanObj as T;
 }
 
@@ -127,7 +141,7 @@ export {
   sendPasswordResetEmail, sendEmailVerification, GoogleAuthProvider, signInWithPopup,
   updateProfile, onAuthStateChanged,
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, serverTimestamp, increment,
+  query, where, orderBy, limit, onSnapshot, serverTimestamp, increment,
 };
 
 export type { FirebaseUser };

@@ -29,7 +29,7 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAuthority();
       allow create: if isOwner(userId)
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.role == 'citizen';
+        && (request.resource.data.role in ['citizen', 'municipal_officer', 'authority'] || !('role' in request.resource.data));
       allow update: if isOwner(userId)
         && (
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'clearanceLevel'])

@@ -60,7 +60,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     (c) => c.status === 'verified'
   ).length;
 
-  const reportsCount = userComplaints.length;
+  const reportsCount = Math.max(user.reportsCount || 0, userComplaints.length);
 
   const totalJurisdictionCount = complaints.length;
 

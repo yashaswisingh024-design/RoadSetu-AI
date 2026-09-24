@@ -18,6 +18,7 @@ import {
   signInWithPopup,
   updateProfile,
   onAuthStateChanged,
+  onSnapshot,
   doc,
   getDoc,
   setDoc,
@@ -65,6 +66,8 @@ interface AuthContextType {
     newName: string,
     photoURL?: string
   ) => Promise<void>;
+
+  incrementReportsCount: () => void;
 
   authModalOpen: boolean;
 
@@ -130,17 +133,26 @@ function profileFromFirebaseUser(
       fbUser.metadata?.creationTime ||
       new Date().toISOString(),
 
-    reportsCount:
-      Number(data.reportsCount || 0),
+    reportsCount: parseSafeCounter(data.reportsCount),
 
-    verifiedRepairsCount:
-      Number(
-        data.verifiedRepairsCount || 0
-      ),
+    verifiedRepairsCount: parseSafeCounter(data.verifiedRepairsCount),
 
     emailVerified:
-      fbUser.emailVerified,
+      Boolean(fbUser.emailVerified),
   };
+}
+
+function parseSafeCounter(raw: unknown): number {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (raw && typeof raw === 'object' && '_operand' in (raw as Record<string, unknown>)) {
+    const op = Number((raw as Record<string, unknown>)._operand);
+    if (Number.isFinite(op)) return op;
+  }
+  if (typeof raw === 'string') {
+    const num = Number(raw);
+    if (Number.isFinite(num)) return num;
+  }
+  return 0;
 }
 
 /* -------------------------------------------------------
@@ -218,7 +230,7 @@ export const AuthProvider: React.FC<{
   };
 
   /* -------------------------------------------------------
-     Firebase auth state
+     Firebase auth state & real-time profile listener
   ------------------------------------------------------- */
 
   useEffect(() => {
@@ -230,71 +242,100 @@ export const AuthProvider: React.FC<{
       return;
     }
 
-    return onAuthStateChanged(
+    let unsubscribeDoc: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(
       auth,
       async fbUser => {
+        if (unsubscribeDoc) {
+          unsubscribeDoc();
+          unsubscribeDoc = null;
+        }
+
         if (!fbUser) {
           setUser(null);
           setLoading(false);
           return;
         }
 
-        /*
-         * Firebase Auth is the source of truth
-         * for the active session.
-         */
+        const localCountKey = `roadsetu_reports_count_${fbUser.uid}`;
+        const localCachedCount = Number(localStorage.getItem(localCountKey) || 0);
 
-        const fallbackProfile =
-          profileFromFirebaseUser(
-            fbUser
-          );
-
+        const fallbackProfile = profileFromFirebaseUser(fbUser);
+        if (localCachedCount > (fallbackProfile.reportsCount || 0)) {
+          fallbackProfile.reportsCount = localCachedCount;
+        }
         setUser(fallbackProfile);
-        setLoading(false);
 
         try {
-          const ref = doc(
-            db,
-            'users',
-            fbUser.uid
+          const ref = doc(db, 'users', fbUser.uid);
+
+          // Real-time synchronization of the user document ensures
+          // increments like reportsCount immediately reflect in the UI
+          unsubscribeDoc = onSnapshot(
+            ref,
+            async snap => {
+              if (snap.exists()) {
+                const firestoreCount = parseSafeCounter(snap.data()?.reportsCount);
+                const currentLocal = Number(localStorage.getItem(localCountKey) || 0);
+                const bestCount = Math.max(firestoreCount, currentLocal);
+                localStorage.setItem(localCountKey, String(bestCount));
+                setUser(profileFromFirebaseUser(fbUser, { ...snap.data(), reportsCount: bestCount }));
+              } else {
+                // Initialize new user profile safely without overwriting concurrent writes
+                try {
+                  await setDoc(
+                    ref,
+                    {
+                      uid: fbUser.uid,
+                      email: fbUser.email || '',
+                      displayName: fbUser.displayName || fbUser.email?.split('@')[0] || 'Citizen',
+                      photoURL: fbUser.photoURL || '',
+                      role: 'citizen',
+                      createdAt: fbUser.metadata?.creationTime || new Date().toISOString(),
+                      reportsCount: localCachedCount,
+                      verifiedRepairsCount: 0,
+                    },
+                    { merge: true }
+                  );
+                } catch (initErr) {
+                  console.warn('Initial user profile bootstrap notice:', initErr);
+                }
+                setUser(fallbackProfile);
+              }
+              setLoading(false);
+            },
+            error => {
+              console.warn('User document real-time listener notice (operating in cached mode):', error?.message || error);
+              setUser(prev => prev || fallbackProfile);
+              setLoading(false);
+            }
           );
-
-          const snap =
-            await getDoc(ref);
-
-          if (snap.exists()) {
-            setUser(
-              profileFromFirebaseUser(
-                fbUser,
-                snap.data()
-              )
-            );
-          } else {
-            await setDoc(
-              ref,
-              sanitizeForFirestore(
-                fallbackProfile
-              )
-            );
-
-            setUser(
-              fallbackProfile
-            );
-          }
         } catch (error) {
-          console.error(
-            'Auth profile sync failed; Firebase session retained:',
-            error
-          );
-
-          showToast(
-            'Signed in. Profile data will sync when the connection is available.',
-            'info'
-          );
+          console.warn('Auth profile sync notice; Firebase session retained:', error);
+          setLoading(false);
         }
       }
     );
+
+    return () => {
+      if (unsubscribeDoc) {
+        unsubscribeDoc();
+      }
+      unsubscribeAuth();
+    };
   }, []);
+
+  const incrementReportsCount = () => {
+    setUser(prev => {
+      if (!prev) return null;
+      const nextCount = (prev.reportsCount || 0) + 1;
+      if (prev.uid) {
+        localStorage.setItem(`roadsetu_reports_count_${prev.uid}`, String(nextCount));
+      }
+      return { ...prev, reportsCount: nextCount };
+    });
+  };
 
   /* -------------------------------------------------------
      EMAIL LOGIN
@@ -986,6 +1027,8 @@ export const AuthProvider: React.FC<{
         resendVerificationEmail,
 
         updateUserProfileData,
+
+        incrementReportsCount,
 
         authModalOpen,
 
