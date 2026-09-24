@@ -1,0 +1,11 @@
+import React from 'react';
+import { MapPin, ArrowUpRight } from 'lucide-react';
+import { useComplaints } from '../context/ComplaintsContext';
+import { Complaint } from '../types';
+import { NavView } from '../components/Navbar';
+
+interface LiveMapViewProps { onNavigate:(view:NavView)=>void; onSelectComplaintForVerification?:(complaint:Complaint)=>void; }
+export const LiveMapView: React.FC<LiveMapViewProps> = ({ onNavigate, onSelectComplaintForVerification }) => {
+  const { complaints } = useComplaints();
+  return <div className="min-h-[80vh] bg-slate-50 px-4 py-8 text-slate-900 sm:px-6 lg:px-8"><div className="mx-auto max-w-6xl"><div className="flex flex-wrap items-end justify-between gap-4"><div><h1 className="text-3xl font-black">Live City Map</h1><p className="mt-2 text-sm text-slate-500">Reported road issues and their current status.</p></div><button onClick={()=>onNavigate('report')} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white">Report an issue<ArrowUpRight className="h-4 w-4"/></button></div><div className="mt-6 grid gap-4 lg:grid-cols-[1.5fr_.5fr]"><div className="min-h-[520px] rounded-3xl border border-slate-200 bg-white p-6 shadow-sm"><div className="flex h-full min-h-[470px] items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 text-center"><div><MapPin className="mx-auto h-10 w-10 text-blue-500"/><h2 className="mt-3 font-bold">Live complaint map</h2><p className="mt-1 text-xs text-slate-500">{complaints.length} report{complaints.length===1?'':'s'} loaded from the platform.</p></div></div></div><div className="space-y-3">{complaints.slice(0,12).map(c=><button key={c.id} onClick={()=>onSelectComplaintForVerification?.(c)} className="w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm hover:border-blue-300"><div className="flex gap-3"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-600"/><div className="min-w-0"><p className="truncate text-xs font-bold">{c.location.road || c.location.city || 'Reported road'}</p><p className="mt-1 truncate text-[11px] text-slate-500">{c.location.formattedAddress || c.description}</p><span className="mt-2 inline-block rounded-full bg-blue-50 px-2 py-1 text-[10px] font-bold text-blue-700">{c.status}</span></div></div></button>)}</div></div></div></div>;
+};
